@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Editable Information Page Editor</title>
+    <title>CanvasLMS Component Editor</title>
     <!-- Supabase Client Library -->
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <!-- Google Fonts -->
@@ -343,8 +343,9 @@
         const quillInstances = new Map();
         
         // --- Supabase Client Initialization ---
-        const SUPABASE_URL = 'https://ttzakubulphvibneblpm.supabase.co';
-        const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InR0emFrdWJ1bHBodmlibmVibHBtIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTExMDYwMTYsImV4cCI6MjA2NjY4MjAxNn0.SXB9SUHUEOrpOsnZSsfsnCxqkc4wUbucpCSGlKghQjM';
+        // REPLACE BOTH KEYS BELOW WITH YOUR OWN
+        const SUPABASE_URL = 'secret';
+        const SUPABASE_ANON_KEY = 'secret';
         const { createClient } = supabase;
         const supabaseClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
         
@@ -1114,4 +1115,5 @@
     </script>
 </body>
 </html>
+
 
