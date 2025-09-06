@@ -8,7 +8,7 @@
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <!-- Google Fonts -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic" crossorigin>
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <!-- Quill.js assets -->
     <link href="https://cdn.jsdelivr.net/npm/quill@2.0.3/dist/quill.snow.css" rel="stylesheet" />
@@ -343,7 +343,6 @@
         const quillInstances = new Map();
         
         // --- Supabase Client Initialization ---
-        // REPLACE BOTH KEYS BELOW WITH YOUR OWN
         const SUPABASE_URL = 'secret';
         const SUPABASE_ANON_KEY = 'secret';
         const { createClient } = supabase;
@@ -610,13 +609,17 @@
             if(nav.querySelector('li')) switchTab(nav.querySelector('li'));
         }
 
-        function addNewComponent(typeKey, targetContainer, anIndex, insertAfterNode = null) {
+        function addNewComponent(typeKey, targetContainer, anIndex, insertAfterNode = null, initialHTML = null) {
             const componentData = componentLibrary[typeKey];
             if (!componentData || !targetContainer) return null;
             const wrapper = document.createElement('div');
             wrapper.className = 'component-wrapper';
             wrapper.dataset.componentType = typeKey;
-            if(componentData.html) wrapper.innerHTML = componentData.html(anIndex);
+            if (initialHTML) {
+                wrapper.innerHTML = initialHTML;
+            } else if(componentData.html) {
+                wrapper.innerHTML = componentData.html(anIndex);
+            }
 
             if (insertAfterNode && insertAfterNode.parentElement === targetContainer) targetContainer.insertBefore(wrapper, insertAfterNode.nextElementSibling);
             else {
@@ -695,7 +698,41 @@
                 }
             }
             validateColumnWidths();
-            container.querySelectorAll('.column-width-input').forEach(input => input.addEventListener('input', validateColumnWidths));
+            container.querySelectorAll('.column-width-input').forEach(input => input.addEventListener('input', (e) => adjustColumnWidths(e.target)));
+        }
+
+        function adjustColumnWidths(changedInput) {
+            const inputs = Array.from(document.querySelectorAll('#column-widths-container .column-width-input'));
+            let total = inputs.reduce((sum, input) => sum + (parseInt(input.value) || 0), 0);
+            
+            if (total > 12) {
+                let overage = total - 12;
+                const otherInputs = inputs.filter(input => input !== changedInput);
+        
+                let reducibleInputs = otherInputs.filter(input => parseInt(input.value) > 1);
+                while (overage > 0 && reducibleInputs.length > 0) {
+                    for (let i = 0; i < reducibleInputs.length && overage > 0; i++) {
+                        let input = reducibleInputs[i];
+                        if (parseInt(input.value) > 1) {
+                            input.value = parseInt(input.value) - 1;
+                            overage--;
+                        }
+                    }
+                    reducibleInputs = reducibleInputs.filter(input => parseInt(input.value) > 1);
+                }
+        
+                if (overage > 0) {
+                    changedInput.value = parseInt(changedInput.value) - overage;
+                }
+            }
+            
+            inputs.forEach(input => {
+                if (parseInt(input.value) < 1) {
+                    input.value = 1;
+                }
+            });
+
+            validateColumnWidths();
         }
 
         function validateColumnWidths() {
@@ -717,7 +754,13 @@
             gridRow.className = 'grid-row'; gridRow.style.cssText = "border: 2px dashed #ccc; padding: 1rem; background: #fcfcfc;";
             widths.forEach(width => {
                 const colDiv = document.createElement('div');
-                colDiv.className = `col-md-${width}`; colDiv.innerHTML = `<div class="component-column"></div>`;
+                colDiv.className = `col-md-${width}`;
+                colDiv.style.position = 'relative';
+                colDiv.innerHTML = `
+                    <div class="column-toolbar" style="position: absolute; top: 5px; right: 20px; z-index: 1;">
+                        <input type="color" value="#fdfdfd" oninput="changeColumnBackgroundColor(this)" title="Column Background Color">
+                    </div>
+                    <div class="component-column"></div>`;
                 gridRow.appendChild(colDiv);
                 refreshInlineAddButtons(colDiv.querySelector('.component-column'));
             });
@@ -748,8 +791,8 @@
             const height = document.getElementById('image-full-height-checkbox').checked ? '' : document.getElementById('image-height-input').value;
             let style = 'width: 100%; max-width: 100%; border-radius: 0.5rem; cursor: pointer;';
             if (height) style += ` height: ${height}px; object-fit: cover;`;
-            const wrapper = addNewComponent('singleImage', currentAddComponentTarget, undefined, currentInsertAfter);
-            if (wrapper) wrapper.innerHTML = `<div style="text-align: center; margin-bottom: 2rem;"><img id="img-${Date.now()}" src="https://placehold.co/600x${height || 400}/cccccc/ffffff?text=Click+to+Change" alt="Placeholder" style="${style}" onclick="promptForImageChange(this)"></div>`;
+            const imageHTML = `<div style="text-align: center; margin-bottom: 2rem;"><img id="img-${Date.now()}" src="https://placehold.co/600x${height || 400}/cccccc/ffffff?text=Click+to+Change" alt="Placeholder" style="${style}" onclick="promptForImageChange(this)"></div>`;
+            addNewComponent('singleImage', currentAddComponentTarget, undefined, currentInsertAfter, imageHTML);
             document.getElementById('image-config-modal').style.display = 'none';
         }
 
@@ -811,9 +854,11 @@
                     componentData.content.columns = [];
                     wrapper.querySelectorAll(':scope > .grid-row > [class*="col-md-"]').forEach(colDiv => {
                         const colClass = Array.from(colDiv.classList).find(c => c.startsWith('col-md-'));
+                        const componentColumn = colDiv.querySelector('.component-column');
                         componentData.content.columns.push({
                             width: colClass.split('-')[2],
-                            children: serializeContainer(colDiv.querySelector('.component-column'))
+                            backgroundColor: componentColumn.style.backgroundColor || '',
+                            children: serializeContainer(componentColumn)
                         });
                     });
                 } else {
@@ -833,7 +878,15 @@
                 if (componentData.type === 'rowLayout') {
                     const layoutWrapper = createCustomLayout(componentData.content.columns.map(c => c.width), container);
                     componentData.content.columns.forEach((colData, index) => {
-                        deserializeContainer(layoutWrapper.querySelectorAll('.component-column')[index], colData.children);
+                        const componentColumn = layoutWrapper.querySelectorAll('.component-column')[index];
+                        if (colData.backgroundColor) {
+                            componentColumn.style.backgroundColor = colData.backgroundColor;
+                            const colorInput = componentColumn.parentElement.querySelector('.column-toolbar input[type="color"]');
+                            if (colorInput) {
+                                colorInput.value = colData.backgroundColor;
+                            }
+                        }
+                        deserializeContainer(componentColumn, colData.children);
                     });
                 } else {
                     const newComponent = addNewComponent(componentData.type, container);
@@ -906,25 +959,44 @@
         }
         
         async function deletePage(pageId) {
-             showConfirm('Delete Page?', 'This action cannot be undone. Are you sure you want to delete this page?', async () => {
-                document.getElementById('loader').style.display = 'block'; document.getElementById('status-message').textContent = 'Deleting page...';
+            showConfirm('Delete Page?', 'This action cannot be undone. Are you sure you want to delete this page?', async () => {
+                document.getElementById('loader').style.display = 'block';
+                document.getElementById('status-message').textContent = 'Deleting page...';
                 try {
-                     const { error } = await supabaseClient.functions.invoke('page-handler', { method: 'DELETE', body: { id: pageId } });
-                     if (error) throw error;
-                     document.getElementById('status-message').textContent = 'Page deleted.';
-                     if (currentPageId === pageId) { currentPageId = null; document.getElementById('save-page-name-input').value = ''; }
-                     loadPagesList();
-                } catch(err) {
-                    document.getElementById('status-message').textContent = 'Error deleting page.'; document.getElementById('response-output').textContent = err.message;
-                } finally { document.getElementById('loader').style.display = 'none'; }
-             });
+                    const { error } = await supabaseClient.functions.invoke('page-handler', { method: 'DELETE', body: { id: pageId } });
+                    if (error) throw error;
+                    document.getElementById('status-message').textContent = 'Page deleted.';
+                    if (currentPageId === pageId) { currentPageId = null; document.getElementById('save-page-name-input').value = ''; }
+                    loadPagesList();
+                } catch (err) {
+                    document.getElementById('status-message').textContent = 'Error deleting page.';
+                    document.getElementById('response-output').textContent = err.message;
+                } finally {
+                    document.getElementById('loader').style.display = 'none';
+                }
+            });
+        }
+        
+        function changeColumnBackgroundColor(inputElement) {
+            const column = inputElement.closest('[class*="col-md-"]').querySelector('.component-column');
+            if (column) {
+                column.style.backgroundColor = inputElement.value;
+            }
         }
         
         function changeComponentColor(inputElement) {
             const wrapper = inputElement.closest('.component-wrapper');
-            const welcomeComponent = wrapper?.querySelector('.tls-welcome-component');
-            if(welcomeComponent) {
-                welcomeComponent.style.backgroundColor = inputElement.value;
+            if (!wrapper) return;
+
+            // Find the main content div of the component.
+            // It's the first direct child that is not the controls or the toolbar.
+            const contentElement = Array.from(wrapper.children).find(child =>
+                !child.classList.contains('component-controls') &&
+                !child.classList.contains('custom-toolbar-container')
+            );
+
+            if (contentElement) {
+                contentElement.style.backgroundColor = inputElement.value;
             }
         }
 
@@ -936,7 +1008,7 @@
                 statusMessageEl.textContent = 'Finalizing page content...'; logEl.textContent += 'Preparing HTML for Canvas...\n';
                 const contentClone = document.getElementById('canvas-content-wrapper').cloneNode(true);
                 
-                contentClone.querySelectorAll('.custom-toolbar-container, .ql-tooltip, .component-controls, .add-component-area, .inline-add-area, .add-tab-btn, .remove-tab-btn').forEach(el => el.remove());
+                contentClone.querySelectorAll('.custom-toolbar-container, .ql-tooltip, .component-controls, .column-toolbar, .add-component-area, .inline-add-area, .add-tab-btn, .remove-tab-btn').forEach(el => el.remove());
                 contentClone.querySelectorAll('[onclick]').forEach(el => el.removeAttribute('onclick'));
                 contentClone.querySelectorAll('[contenteditable]').forEach(el => el.removeAttribute('contenteditable'));
                 contentClone.querySelectorAll('.ql-editor').forEach(el => {
@@ -1063,9 +1135,18 @@
                 }
                  if(button.closest('.custom-dropdown-menu')) button.closest('.custom-dropdown-container').classList.remove('active');
             });
-            toolbarContainer.querySelector('input[type="color"]')?.addEventListener('input', (e) => {
-                 quill.format('color', e.target.value);
-            });
+
+            const colorInput = toolbarContainer.querySelector('input[type="color"]');
+            if (colorInput) {
+                // Apply color live as the user picks
+                colorInput.addEventListener('input', (e) => {
+                    quill.format('color', e.target.value);
+                });
+                // Close the dropdown when the user confirms their color choice
+                colorInput.addEventListener('change', (e) => {
+                    e.target.closest('.custom-dropdown-container')?.classList.remove('active');
+                });
+            }
         }
         
         function initializeAllQuillEditors(container) {
